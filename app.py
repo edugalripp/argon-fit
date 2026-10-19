@@ -13,7 +13,7 @@ st.set_page_config(page_title="Argón Fit Pro", page_icon="💪", layout="wide")
 if "API_KEY_GOOGLE" in st.secrets:
     API_KEY_GOOGLE = st.secrets["API_KEY_GOOGLE"]
 else:
-    API_KEY_GOOGLE = 'AQ.Ab8RN6Inf4qJtrDHs4YTuc6zzBI93QOpuiDaIMlbdTQ-oohROA'
+    API_KEY_GOOGLE = ""
 
 def obtener_cliente_ia():
     return genai.Client(api_key=API_KEY_GOOGLE)
