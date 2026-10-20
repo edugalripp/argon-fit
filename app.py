@@ -15,10 +15,18 @@ if "API_KEY_GOOGLE" in st.secrets:
 else:
     API_KEY_GOOGLE = ""
 
+def obtener_cliente_ia():
+    return genai.Client(api_key=API_KEY_GOOGLE)
+
 def llamar_ia(contenidos):
-    """Sistema anti-caídas (Fallback): prueba varios modelos oficiales rápidos para evitar el error 503."""
-    cliente = genai.Client(api_key=API_KEY_GOOGLE)
-    modelos = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro']
+    """Sistema anti-caídas actualizado: evita el error 404 de gemini-2.5-pro y el 503 de saturación."""
+    cliente = obtener_cliente_ia()
+    modelos = [
+        'gemini-3.1-pro-preview',
+        'gemini-3.8-flash',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash'
+    ]
     ultimo_err = None
     for m in modelos:
         try:
