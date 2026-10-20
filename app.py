@@ -246,102 +246,102 @@ with tab_panel:
         st.subheader("🍽️ Registrar Comida")
         
 modo_registro = st.radio(
-            "Elige el método de entrada:", 
-            ["✍️ Por Texto", "📸 Por Foto (IA)", "🏷️ Código de Barras"], 
-            horizontal=True
-        )
+    "Elige el método de entrada:", 
+    ["✍️ Por Texto", "📸 Por Foto (IA)", "🏷️ Código de Barras"], 
+    horizontal=True
+)
         
-        if modo_registro == "✍️ Por Texto":
-            comida_texto = st.text_area("Describe tu plato:", placeholder="Ej: 150g de arroz con 2 latas de atún...", height=100)
-            if st.button("➕ Calcular y Añadir", type="primary", use_container_width=True):
-                if comida_texto:
-                    with st.spinner("Calculando macros..."):
-                        try:
-                            cliente = obtener_cliente_ia()
-                            instruccion = f"Plato: '{comida_texto}'. Devuelve SOLO 4 enteros separados por espacio: Calorias Proteinas Hidratos Grasas."
-                            res = cliente.models.generate_content(model='gemini-3.8-flash', contents=instruccion)
-                            nums = res.text.strip().split()
-                            if len(nums) == 4:
-                                k, p, c, g = map(int, nums)
-                                agregar_comida(fecha_activa_str, comida_texto, k, p, c, g)
-                                st.rerun()
-                            else:
-                                st.error("Detalla un poco más las cantidades.")
-                        except Exception as err:
-                            st.error(f"Error: {err}")
-
-        elif modo_registro == "📸 Por Foto (IA)":
-            archivo_img = st.file_uploader("Sube imagen del plato:", type=["jpg", "jpeg", "png", "webp"])
-            contexto_extra = st.text_input("Aclaración opcional (ej: '200g de pollo'):")
-            if archivo_img is not None:
-                img_abierta = Image.open(archivo_img)
-                st.image(img_abierta, use_container_width=True)
-                if st.button("📸 Escaneo Visual", type="primary", use_container_width=True):
-                    with st.spinner("Analizando plato..."):
-                        try:
-                            cliente = obtener_cliente_ia()
-                            p_img = (
-                                f"Analiza este plato (Nota: {contexto_extra}). Responde en 2 líneas exactas:\n"
-                                "L1: Nombre corto del plato y pesos\n"
-                                "L2: 4 enteros separados por espacio (Kcal Prot Hidratos Grasas)"
-                            )
-                            res = cliente.models.generate_content(model='gemini-3.8-flash', contents=[img_abierta, p_img])
-                            partes = [x.strip() for x in res.text.strip().split('\n') if x.strip()]
-                            if len(partes) >= 2:
-                                nombre_plato = partes[0].replace("L1:", "").strip()
-                                nums = partes[-1].replace("L2:", "").strip().split()
-                                if len(nums) == 4:
-                                    k, p, c, g = map(int, nums)
-                                    agregar_comida(fecha_activa_str, f"📸 {nombre_plato}", k, p, c, g)
-                                    st.rerun()
-                        except Exception as err:
-                            st.error(f"Fallo al procesar: {err}")
-
-        elif modo_registro == "🏷️ Código de Barras":
-            foto_ean = st.camera_input("📷 Capturar código de barras")
-            ean_escrito = st.text_input("🔢 O introduce los 13 dígitos manualmente:")
-            codigo_activo = ean_escrito.strip()
-            
-            if foto_ean is not None and not codigo_activo:
-                with st.spinner("Extrayendo dígitos..."):
-                    try:
-                        img_ean = Image.open(foto_ean)
-                        cliente = obtener_cliente_ia()
-                        res_ean = cliente.models.generate_content(
-                            model='gemini-3.8-flash',
-                            contents=[img_ean, "Devuelve únicamente los números del código de barras sin espacios."]
-                        )
-                        codigo_activo = "".join(filter(str.isdigit, res_ean.text))
-                        st.info(f"Código detectado: {codigo_activo}")
-                    except Exception as err:
-                        st.error(f"Error de lectura: {err}")
-
-            if codigo_activo:
-                endpoint = f"https://world.openfoodfacts.org/api/v2/product/{codigo_activo}.json"
-                r_web = requests.get(endpoint)
-                if r_web.status_code == 200 and r_web.json().get("status") == 1:
-                    info_p = r_web.json()["product"]
-                    nom = info_p.get("product_name_es") or info_p.get("product_name", "Alimento")
-                    nut = info_p.get("nutriments", {})
-                    
-                    k100 = float(nut.get("energy-kcal_100g", 0))
-                    p100 = float(nut.get("proteins_100g", 0))
-                    c100 = float(nut.get("carbohydrates_100g", 0))
-                    g100 = float(nut.get("fat_100g", 0))
-                    
-                    st.success(f"🛒 {nom} (Por 100g: {int(k100)} kcal | {p100:.1f}g P | {c100:.1f}g CH | {g100:.1f}g G)")
-                    peso_racion = st.number_input("Gramos consumidos:", min_value=1, max_value=2000, value=100, step=10)
-                    ratio = peso_racion / 100.0
-                    
-                    if st.button("➕ Guardar Producto", type="primary", use_container_width=True):
-                        agregar_comida(
-                            fecha_activa_str, 
-                            f"🏷️ {peso_racion}g {nom}", 
-                            int(k100 * ratio), int(p100 * ratio), int(c100 * ratio), int(g100 * ratio)
-                        )
+if modo_registro == "✍️ Por Texto":
+    comida_texto = st.text_area("Describe tu plato:", placeholder="Ej: 150g de arroz con 2 latas de atún...", height=100)
+    if st.button("➕ Calcular y Añadir", type="primary", use_container_width=True):
+        if comida_texto:
+            with st.spinner("Calculando macros..."):
+                try:
+                    cliente = obtener_cliente_ia()
+                    instruccion = f"Plato: '{comida_texto}'. Devuelve SOLO 4 enteros separados por espacio: Calorias Proteinas Hidratos Grasas."
+                    res = cliente.models.generate_content(model='gemini-3.8-flash', contents=instruccion)
+                    nums = res.text.strip().split()
+                    if len(nums) == 4:
+                        k, p, c, g = map(int, nums)
+                        agregar_comida(fecha_activa_str, comida_texto, k, p, c, g)
                         st.rerun()
-                else:
-                    st.warning("No figura en la base de datos. Usa el escaneo por foto o escribe otro código.")
+                    else:
+                        st.error("Detalla un poco más las cantidades.")
+                except Exception as err:
+                    st.error(f"Error: {err}")
+        
+elif modo_registro == "📸 Por Foto (IA)":
+    archivo_img = st.file_uploader("Sube imagen del plato:", type=["jpg", "jpeg", "png", "webp"])
+    contexto_extra = st.text_input("Aclaración opcional (ej: '200g de pollo'):")
+    if archivo_img is not None:
+        img_abierta = Image.open(archivo_img)
+        st.image(img_abierta, use_container_width=True)
+        if st.button("📸 Escaneo Visual", type="primary", use_container_width=True):
+            with st.spinner("Analizando plato..."):
+                try:
+                    cliente = obtener_cliente_ia()
+                    p_img = (
+                        f"Analiza este plato (Nota: {contexto_extra}). Responde en 2 líneas exactas:\n"
+                        "L1: Nombre corto del plato y pesos\n"
+                        "L2: 4 enteros separados por espacio (Kcal Prot Hidratos Grasas)"
+                    )
+                    res = cliente.models.generate_content(model='gemini-3.8-flash', contents=[img_abierta, p_img])
+                    partes = [x.strip() for x in res.text.strip().split('\n') if x.strip()]
+                    if len(partes) >= 2:
+                        nombre_plato = partes[0].replace("L1:", "").strip()
+                        nums = partes[-1].replace("L2:", "").strip().split()
+                        if len(nums) == 4:
+                            k, p, c, g = map(int, nums)
+                            agregar_comida(fecha_activa_str, f"📸 {nombre_plato}", k, p, c, g)
+                            st.rerun()
+                except Exception as err:
+                    st.error(f"Fallo al procesar: {err}")
+
+elif modo_registro == "🏷️ Código de Barras":
+    foto_ean = st.camera_input("📷 Capturar código de barras")
+    ean_escrito = st.text_input("🔢 O introduce los 13 dígitos manualmente:")
+    codigo_activo = ean_escrito.strip()
+            
+    if foto_ean is not None and not codigo_activo:
+        with st.spinner("Extrayendo dígitos..."):
+            try:
+                img_ean = Image.open(foto_ean)
+                cliente = obtener_cliente_ia()
+                res_ean = cliente.models.generate_content(
+                    model='gemini-3.8-flash',
+                    contents=[img_ean, "Devuelve únicamente los números del código de barras sin espacios."]
+                )
+                codigo_activo = "".join(filter(str.isdigit, res_ean.text))
+                st.info(f"Código detectado: {codigo_activo}")
+            except Exception as err:
+                st.error(f"Error de lectura: {err}")
+
+    if codigo_activo:
+        endpoint = f"https://world.openfoodfacts.org/api/v2/product/{codigo_activo}.json"
+        r_web = requests.get(endpoint)
+        if r_web.status_code == 200 and r_web.json().get("status") == 1:
+            info_p = r_web.json()["product"]
+            nom = info_p.get("product_name_es") or info_p.get("product_name", "Alimento")
+            nut = info_p.get("nutriments", {})
+                    
+            k100 = float(nut.get("energy-kcal_100g", 0))
+            p100 = float(nut.get("proteins_100g", 0))
+            c100 = float(nut.get("carbohydrates_100g", 0))
+            g100 = float(nut.get("fat_100g", 0))
+                    
+            st.success(f"🛒 {nom} (Por 100g: {int(k100)} kcal | {p100:.1f}g P | {c100:.1f}g CH | {g100:.1f}g G)")
+            peso_racion = st.number_input("Gramos consumidos:", min_value=1, max_value=2000, value=100, step=10)
+            ratio = peso_racion / 100.0
+                    
+            if st.button("➕ Guardar Producto", type="primary", use_container_width=True):
+                agregar_comida(
+                    fecha_activa_str, 
+                    f"🏷️ {peso_racion}g {nom}", 
+                    int(k100 * ratio), int(p100 * ratio), int(c100 * ratio), int(g100 * ratio)
+                )
+                st.rerun()
+        else:
+            st.warning("No figura en la base de datos. Usa el escaneo por foto o escribe otro código.")
 
     with col_hist:
         st.subheader("📋 Registro del Día")
