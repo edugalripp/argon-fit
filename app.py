@@ -19,13 +19,12 @@ def obtener_cliente_ia():
     return genai.Client(api_key=API_KEY_GOOGLE)
 
 def llamar_ia(contenidos):
-    """Sistema anti-caídas actualizado: evita el error 404 de gemini-2.5-pro y el 503 de saturación."""
+    """Usa directamente los modelos activos de 2026 sin pasar por modelos retirados."""
     cliente = obtener_cliente_ia()
     modelos = [
-        'gemini-2.5-flash',
-        'gemini-3.1-pro-preview',
         'gemini-3.8-flash',
-        'gemini-2.0-flash'
+        'gemini-3.1-pro-preview',
+        'gemini-3.8-flash'
     ]
     ultimo_err = None
     for m in modelos:
@@ -539,7 +538,7 @@ with tab_calendario:
                     try:
                         cli = obtener_cliente_ia()
                         p_cal = f"Meta: 2400kcal, 150g P. Del {f_i} al {f_f} haré {act_input} y evento '{evento_input}'. Dame 3 pautas breves."
-                        for m_name in ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3.8-flash']:
+                        for m_name in ['gemini-3.8-flash', 'gemini-3.8-flash', 'gemini-3.8-flash']:
                             try:
                                 plan_txt = cli.models.generate_content(model=m_name, contents=p_cal).text
                                 break
@@ -594,7 +593,7 @@ with tab_nevera:
             try:
                 # Usamos directamente el modelo Flash en modo streaming para respuesta inmediata
                 respuesta_stream = cli.models.generate_content_stream(
-                    model='gemini-2.5-flash',
+                    model='gemini-3.8-flash',
                     contents=prompt_chef
                 )
                 texto_completo = st.write_stream(chunk.text for chunk in respuesta_stream if chunk.text)
@@ -799,7 +798,7 @@ with tab_coach:
                     )
                     cli = obtener_cliente_ia()
                     respuesta_coach = None
-                    for m_name in ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3.8-flash']:
+                    for m_name in ['gemini-3.8-flash', 'gemini-3.8-flash', 'gemini-3.8-flash']:
                         try:
                             respuesta_coach = cli.models.generate_content(model=m_name, contents=prompt_rutina).text
                             break
