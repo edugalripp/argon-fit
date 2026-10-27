@@ -22,9 +22,9 @@ def llamar_ia(contenidos):
     """Sistema anti-caídas actualizado: evita el error 404 de gemini-2.5-pro y el 503 de saturación."""
     cliente = obtener_cliente_ia()
     modelos = [
+        'gemini-2.5-flash',
         'gemini-3.1-pro-preview',
         'gemini-3.8-flash',
-        'gemini-2.5-flash',
         'gemini-2.0-flash'
     ]
     ultimo_err = None
@@ -556,112 +556,173 @@ with tab_calendario:
             st.rerun()
 
 # ==============================================================================
-# PESTAÑA 3: COCINERO DE NEVERA (DESPENSA GUARDADA + RACIONES REALISTAS POR TOMA)
+# PESTAÑA 3: COCINERO DE NEVERA (ULTRA-RÁPIDO CON STREAMING)
 # ==============================================================================
 with tab_nevera:
-    st.subheader("🍳 Cocinero Inteligente por Comida")
+    st.subheader("🍳 Cocinero Inteligente Express")
 
-    # Guardado permanente de la despensa en SQLite para no escribirla cada vez
     conn_d = sqlite3.connect('nutricion_argon.db')
     cur_d = conn_d.cursor()
     cur_d.execute("CREATE TABLE IF NOT EXISTS config_usuario (clave TEXT PRIMARY KEY, valor TEXT)")
     cur_d.execute("SELECT valor FROM config_usuario WHERE clave = 'mi_despensa'")
     fila_desp = cur_d.fetchone()
-    despensa_actual = fila_desp[0] if fila_desp else "Pechuga de pollo, huevos, arroz, pasta, patatas, atún, leche, yogur griego, espinacas, queso"
+    despensa_actual = fila_desp[0] if fila_desp else "Pechuga de pollo, huevos, arroz, pasta, patatas, atún, leche, yogur griego, espinacas, champiñones"
     conn_d.close()
 
-    with st.expander("🗄️ Mi Nevera y Despensa (Se guarda automáticamente)", expanded=True):
-        nueva_despensa = st.text_area("Ingredientes que sueles tener en casa:", value=despensa_actual, height=90)
-        if st.button("💾 Actualizar mi despensa fija"):
+    with st.expander("🗄️ Mi Nevera y Despensa", expanded=False):
+        nueva_despensa = st.text_area("Ingredientes disponibles:", value=despensa_actual, height=80)
+        if st.button("💾 Guardar despensa"):
             conn_d = sqlite3.connect('nutricion_argon.db')
             conn_d.execute("INSERT OR REPLACE INTO config_usuario VALUES ('mi_despensa', ?)", (nueva_despensa,))
             conn_d.commit()
             conn_d.close()
-            st.success("¡Despensa guardada para próximas sesiones!")
+            st.success("¡Despensa actualizada!")
             st.rerun()
 
-    st.divider()
-    c_toma, c_modo, c_tiempo = st.columns(3)
-    toma_elegida = c_toma.selectbox("🍽️ ¿Qué comida vas a hacer?", ["Comida / Almuerzo (35-40% del día)", "Cena (30-35% del día)", "Desayuno / Merienda (20-25% del día)"])
-    modo_compra = c_modo.radio("🛒 Ingredientes:", ["Usar principalmente mi despensa", "Sugerir platos variados (incluyendo compra nueva)"])
-    tiempo_max = c_tiempo.selectbox("⏱️ Tiempo:", ["10 min (Express)", "20 min (Normal)", "35 min (Elaborado)"])
+    c_toma, c_tiempo = st.columns(2)
+    toma_elegida = c_toma.selectbox("🍽️ Comida:", ["Comida (600-750 kcal)", "Cena (500-650 kcal)", "Desayuno / Merienda (350-450 kcal)"])
+    tiempo_max = c_tiempo.selectbox("⏱️ Tiempo:", ["10 min (Express)", "20 min (Normal)"])
 
-    # Cálculo de macros realistas SOLO para esta comida (no todo el día de golpe)
-    if "Comida" in toma_elegida:
-        k_toma = min(max(550, int(rest_kcal * 0.5)), 900)
-        p_toma = min(max(35, int(rest_prot * 0.5)), 55)
-    elif "Cena" in toma_elegida:
-        k_toma = min(max(450, int(rest_kcal * 0.6)), 800)
-        p_toma = min(max(35, int(rest_prot * 0.6)), 55)
-    else:
-        k_toma = min(max(300, int(rest_kcal * 0.3)), 550)
-        p_toma = min(max(20, int(rest_prot * 0.35)), 40)
+    if st.button("⚡ Generar 2 Platos al Instante", type="primary", use_container_width=True):
+        prompt_chef = (
+            f"Sé directo y conciso. Dame 2 recetas rápidas para {toma_elegida} en máximo {tiempo_max}. "
+            f"Usa principalmente estos ingredientes: {nueva_despensa}. "
+            f"Formato por plato: Nombre, Ingredientes en gramos (para 1 persona), 3 pasos cortos y Macros totales."
+        )
+        cli = obtener_cliente_ia()
+        with st.container(border=True):
+            try:
+                # Usamos directamente el modelo Flash en modo streaming para respuesta inmediata
+                respuesta_stream = cli.models.generate_content_stream(
+                    model='gemini-2.5-flash',
+                    contents=prompt_chef
+                )
+                texto_completo = st.write_stream(chunk.text for chunk in respuesta_stream if chunk.text)
+                st.session_state['receta_activa'] = texto_completo
+            except Exception as e:
+                st.error(f"Error de conexión: {e}")
 
-    st.info(f"🎯 **Objetivo realista para esta toma:** ~**{k_toma} kcal** y **~{p_toma}g de proteína** (dejando margen para el resto de comidas del día).")
-
-    if st.button("👨‍🍳 Generar 3 Opciones de Platos", type="primary", use_container_width=True):
-        with st.spinner("Diseñando platos equilibrados..."):
-            prompt_chef = (
-                f"Actúa como chef deportivo. Diseña 3 opciones distintas para: {toma_elegida} en {tiempo_max}.\n"
-                f"IMPORTANTE: Es SOLO UNA COMIDA, NO metas todas las calorías del día en un plato gigante. "
-                f"Ajusta las cantidades en crudo para que el plato ronde las {k_toma} kcal y {p_toma}g de proteína.\n"
-                f"Despensa disponible: {nueva_despensa}.\n"
-                f"Preferencia: {modo_compra} (propón variedad real de sabores, no solo arroz con pollo).\n"
-                f"Incluye gramos exactos, preparación rápida y macros por plato."
-            )
-            cli = obtener_cliente_ia()
-            texto_receta = None
-            for m_name in ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3.8-flash']:
-                try:
-                    texto_receta = cli.models.generate_content(model=m_name, contents=prompt_chef).text
-                    break
-                except Exception:
-                    continue
-            if texto_receta:
-                st.session_state['receta_activa'] = texto_receta
-            else:
-                st.error("Servidores ocupados en este instante. Pulsa de nuevo en 5 segundos.")
-
-    if 'receta_activa' in st.session_state:
+    elif 'receta_activa' in st.session_state:
         with st.container(border=True):
             st.markdown(st.session_state['receta_activa'])
 
 # ==============================================================================
-# PESTAÑA 4: PESO, BÁSCULA Y GRÁFICAS
+# PESTAÑA 4: BÁSCULA + IMPORTADOR ZEPP LIFE
 # ==============================================================================
 with tab_progreso:
-    st.subheader("⚖️ Evolución Corporal y Cumplimiento")
-    col_p1, col_p2 = st.columns([1, 1.8])
+    st.subheader("⚖️ Evolución Corporal y Conexión Zepp Life")
+    col_p1, col_p2 = st.columns([1.1, 1.7])
 
     with col_p1:
         with st.container(border=True):
+            st.markdown("#### ✍️ Registro Manual")
             f_pesaje = st.date_input("Fecha:", date.today(), key="f_peso_tab")
             v_peso = st.number_input("Peso (kg):", 40.0, 160.0, 75.0, 0.1)
             v_grasa = st.number_input("% Grasa:", 3.0, 50.0, 15.0, 0.1)
             v_musc = st.number_input("Masa Muscular (kg):", 20.0, 100.0, 58.0, 0.1)
-            v_nota = st.text_input("Nota (ej: ayunas):")
             if st.button("💾 Guardar Pesaje", type="primary", use_container_width=True):
-                guardar_corporal(f_pesaje.isoformat(), v_peso, v_grasa, v_musc, v_nota)
-                st.success("Guardado correctamente.")
+                guardar_corporal(f_pesaje.isoformat(), v_peso, v_grasa, v_musc, "Manual")
+                st.success("Guardado.")
                 st.rerun()
+
+        with st.expander("📲 Sincronizar con Zepp Life (CSV)"):
+            st.caption("En Zepp Life ve a: **Perfil > Ajustes > Seguridad de la cuenta > Exportar datos > Corporal (Body)** y sube aquí el archivo `.csv` generado.")
+            archivo_zepp = st.file_uploader("Sube el CSV de Zepp Life", type=["csv"])
+            if archivo_zepp is not None:
+                df_z = pd.read_csv(archivo_zepp)
+                st.dataframe(df_z.tail(3), use_container_width=True)
+                if st.button("📥 Importar todo el historial de Zepp Life", use_container_width=True):
+                    conn_z = sqlite3.connect('nutricion_argon.db')
+                    importados = 0
+                    for _, row in df_z.iterrows():
+                        try:
+                            # Detecta las columnas estándar del exportador de Zepp Life / Xiaomi
+                            f_raw = str(row.get('time', row.get('date', row.iloc[0])))[:10]
+                            p_val = float(row.get('weight', row.iloc[1]))
+                            g_val = float(row.get('fatRate', row.get('bodyFat', 15.0))) if pd.notna(row.get('fatRate', row.get('bodyFat', None))) else 15.0
+                            m_val = float(row.get('muscleRate', row.get('muscle', 58.0))) if pd.notna(row.get('muscleRate', row.get('muscle', None))) else 58.0
+                            conn_z.execute("INSERT OR REPLACE INTO corporal VALUES (?, ?, ?, ?, ?)", (f_raw, p_val, g_val, m_val, "Zepp Life"))
+                            importados += 1
+                        except Exception:
+                            continue
+                    conn_z.commit()
+                    conn_z.close()
+                    st.success(f"¡{importados} pesajes de tu báscula importados!")
+                    st.rerun()
 
     with col_p2:
         df_c = obtener_historial_corporal()
         if not df_c.empty:
             st.line_chart(df_c.set_index('fecha')[['peso', 'grasa']])
-            with st.expander("Historial de pesajes"):
+            with st.expander("Ver tabla de registros"):
                 st.dataframe(df_c, use_container_width=True, hide_index=True)
         else:
-            st.info("Añade tu primer registro de báscula para ver la gráfica.")
+            st.info("Aún no hay pesajes registrados.")
+
+# ==============================================================================
+# PESTAÑA 5: ENTRENAMIENTO POR DESPLEGABLES Y PESOS (+ BACKUP DE SEGURIDAD)
+# ==============================================================================
+with tab_coach:
+    st.subheader("🏋️‍♂️ Control de Cargas por Grupo Muscular")
+
+    # Catálogo base de tus ejercicios habituales por grupo
+    CATALOGO_EJERCICIOS = {
+        "Espalda": ["Jalón al pecho", "Remo en polea baja", "Remo con mancuerna", "Remo en máquina", "Pull-over en polea"],
+        "Pecho": ["Press de banca", "Press inclinado mancuernas", "Press en máquina", "Cruce de poleas", "Pec-Deck (Aperturas)"],
+        "Hombro": ["Press de hombro en máquina", "Press militar mancuernas", "Elevaciones laterales", "Pájaros (Deltoides post.)"],
+        "Bíceps y Tríceps": ["Curl de bíceps con mancuernas", "Curl martillo", "Curl en polea", "Extensión de tríceps en polea", "Press francés / Tras nuca"],
+        "Pierna": ["Prensa inclinada", "Extensión de cuádriceps", "Curl femoral", "Máquina de abductores", "Elevación de gemelos"]
+    }
+
+    conn_w = sqlite3.connect('nutricion_argon.db')
+    cur_w = conn_w.cursor()
+    # Tabla para guardar el peso actual de cada ejercicio y el historial
+    cur_w.execute("CREATE TABLE IF NOT EXISTS pesos_ejercicios (ejercicio TEXT PRIMARY KEY, grupo TEXT, peso REAL, series_reps TEXT, fecha_mod TEXT)")
+    cur_w.execute("CREATE TABLE IF NOT EXISTS log_series (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, grupo TEXT, ejercicio TEXT, peso REAL, series_reps TEXT)")
+    cur_w.execute("SELECT ejercicio, peso, series_reps, fecha_mod FROM pesos_ejercicios")
+    guardados = {fila[0]: (fila[1], fila[2], fila[3]) for fila in cur_w.fetchall()}
+    conn_w.close()
+
+    st.caption("Ajusta el peso con los botones **- / +** y pulsa Guardar en el bloque que hayas entrenado hoy. El último peso se queda memorizado para tu próximo día.")
+
+    # Desplegables divididos por grupo muscular
+    for grupo, lista_ejs in CATALOGO_EJERCICIOS.items():
+        with st.expander(f"💪 {grupo}", expanded=(grupo in ["Espalda", "Pecho"])):
+            cambios_grupo = []
+            for ej in lista_ejs:
+                peso_previo, reps_previas, ult_fecha = guardados.get(ej, (20.0, "3x10", "Sin registro"))
+                c1, c2, c3 = st.columns([2.2, 1.5, 1.3])
+                c1.markdown(f"**{ej}**  \n<span style='font-size:0.75rem; color:#A6ADC8;'>Última vez: {ult_fecha}</span>", unsafe_allow_html=True)
+                nuevo_peso = c2.number_input("Peso (kg)", min_value=0.0, max_value=300.0, value=float(peso_previo), step=2.5, key=f"peso_{ej}", label_visibility="collapsed")
+                nuevas_reps = c3.selectbox("Series", ["4x8", "4x10", "3x10", "3x12", "3x15"], index=["4x8", "4x10", "3x10", "3x12", "3x15"].index(reps_previas) if reps_previas in ["4x8", "4x10", "3x10", "3x12", "3x15"] else 2, key=f"reps_{ej}", label_visibility="collapsed")
+                cambios_grupo.append((ej, nuevo_peso, nuevas_reps))
+
+            if st.button(f"💾 Guardar sesión de {grupo}", key=f"btn_save_{grupo}", type="primary", use_container_width=True):
+                hoy_str = date.today().isoformat()
+                conn_w = sqlite3.connect('nutricion_argon.db')
+                for ej_nom, p_val, r_val in cambios_grupo:
+                    conn_w.execute("INSERT OR REPLACE INTO pesos_ejercicios VALUES (?, ?, ?, ?, ?)", (ej_nom, grupo, p_val, r_val, hoy_str))
+                    conn_w.execute("INSERT INTO log_series (fecha, grupo, ejercicio, peso, series_reps) VALUES (?, ?, ?, ?, ?)", (hoy_str, grupo, ej_nom, p_val, r_val))
+                conn_w.commit()
+                conn_w.close()
+                guardar_rango_eventos(date.today(), date.today(), f"Gimnasio ({grupo})", sal_hoy, est_hoy)
+                st.success(f"¡Pesos de {grupo} actualizados y sesión registrada en el calendario!")
+                st.rerun()
 
     st.divider()
-    df_m14 = obtener_historial_macros_dias(14)
-    if not df_m14.empty:
-        cg1, cg2 = st.columns(2)
-        cg1.markdown("**🍗 Proteína (Últimos 14d)**")
-        cg1.bar_chart(df_m14.set_index('fecha')['proteina'], color="#89B4FA")
-        cg2.markdown("**🔥 Calorías (Últimos 14d)**")
-        cg2.bar_chart(df_m14.set_index('fecha')['calorias'], color="#F38BA8")
+    # Sistema de seguridad para evitar el borrado de Streamlit Cloud
+    with st.expander("🛡️ Copia de Seguridad de tus Datos (Evitar borrados de la nube)"):
+        st.caption("Streamlit Cloud borra el archivo local cuando reinicia el servidor. Descarga tu archivo al terminar la semana o súbelo aquí si ves que la app se ha reiniciado.")
+        c_b1, c_b2 = st.columns(2)
+        with open("nutricion_argon.db", "rb") as fp:
+            c_b1.download_button("⬇️ Descargar mis datos (.db)", data=fp, file_name=f"backup_argon_{date.today().isoformat()}.db", mime="application/octet-stream", use_container_width=True)
+        db_subida = c_b2.file_uploader("⬆️ Restaurar copia (.db)", type=["db"], label_visibility="collapsed")
+        if db_subida is not None:
+            if st.button("🔄 Aplicar copia restaurada", use_container_width=True):
+                with open("nutricion_argon.db", "wb") as f_out:
+                    f_out.write(db_subida.getbuffer())
+                st.success("¡Base de datos restaurada al 100%!")
+                st.rerun()
 
 # ==============================================================================
 # PESTAÑA 5: ENTRENADOR DE GIMNASIO (RUTINAS, VARIANTES Y REORGANIZACIÓN)
